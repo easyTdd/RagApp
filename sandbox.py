@@ -17,7 +17,7 @@ pmEditions = [
     "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/OJIyjmFAua"
 ]
 
-from rag import prefill_rag
+from rag import prefill_rag, get_embedding_model
 
 prefill_rag(pmEditions, "pm_chroma_db")
 
@@ -29,3 +29,35 @@ prefill_rag(pmEditions, "pm_chroma_db")
 #         for key, value in doc.metadata.items():
 #             f.write(f"{key}: {value}\n")
 #         f.write("\n" + "-"*28 + "\n")
+
+
+from langchain_community.vectorstores import Chroma
+import streamlit as st
+import os
+
+openai_api_key = st.secrets["OPENAI_API_KEY"]    
+os.environ["OPENAI_API_KEY"] = openai_api_key
+
+# Load your vector store
+vector_store = Chroma(
+    persist_directory="./pm_chroma_db",
+    embedding_function=get_embedding_model()  # Use the same as when writing
+)
+
+# Get all documents
+result = vector_store.get()
+documents = result['documents']
+metadatas = result['metadatas']
+
+seen = set()
+duplicates = []
+for doc, meta in zip(documents, metadatas):
+    key = (meta.get("reference"), meta.get("chunk_number"))
+    if key in seen:
+        duplicates.append(key)
+    else:
+        seen.add(key)
+
+print(f"Found {len(duplicates)} duplicate chunks.")
+# if duplicates:
+#     print("Duplicates:", duplicates)

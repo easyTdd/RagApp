@@ -19,7 +19,7 @@ checkpointer = InMemorySaver()
 
 class Paragraph(BaseModel):
     content: str
-    references: Optional[List[str]]
+    references: Optional[List[str]] = []
 
 class Response(BaseModel):    
     paragraphs: List[Paragraph]
@@ -73,34 +73,35 @@ def retrieve_pm_context(query: str, date: str):
     query: Užklausos tekstas. Pateikti kuo daugiau konteksto, kad būtų galima tiksliai atsakyti.
     date: Data ISO formatu (YYYY-MM-DD), kuri nurodo, kuriuo laikotarpiu turi būti taikoma informacija.
     """
-
-    retrieved_docs = query_rag(query, "pm_chroma_db")  # get more to filter
+    
+    retrieved_docs = query_rag(
+        query, 
+        date,
+        "pm_chroma_db")  # get more to filter
 
     print(f"Retrieved {len(retrieved_docs)} documents from RAG.")
 
-    print("\n\n".join(
-        (f"Source: {doc.metadata}\nContent: {doc.page_content}")
-        for doc in retrieved_docs
-    ))
+    for doc in retrieved_docs:        
+        print(json.dumps({"metadata": doc.metadata}, indent=2, ensure_ascii=False))
 
     # Filter by effective_from <= date and (effective_to >= date or effective_to is None)
-    filtered_docs = []
-    for doc in retrieved_docs:
-        meta = doc.metadata or {}
-        eff_from = meta.get("effective_from")
-        eff_to = meta.get("effective_to")
-        if eff_from and eff_from > date:
-            continue
-        if eff_to and eff_to < date:
-            continue
-        filtered_docs.append(doc)
-    filtered_docs = filtered_docs[:5]  # limit to 5 after filtering
+    # filtered_docs = []
+    # for doc in retrieved_docs:
+    #     meta = doc.metadata or {}
+    #     eff_from = meta.get("effective_from")
+    #     eff_to = meta.get("effective_to")
+    #     if eff_from and eff_from > date:
+    #         continue
+    #     if eff_to and eff_to < date:
+    #         continue
+    #     filtered_docs.append(doc)
+    # filtered_docs = filtered_docs[:5]  # limit to 5 after filtering
 
     serialized = "\n\n".join(
         (f"Source: {doc.metadata}\nContent: {doc.page_content}")
-        for doc in filtered_docs
+        for doc in retrieved_docs
     )
-    return serialized, filtered_docs
+    return serialized, retrieved_docs
 
 @tool(response_format="content")
 def get_current_date() -> str:

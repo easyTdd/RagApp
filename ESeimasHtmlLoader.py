@@ -144,13 +144,14 @@ class ESeimasHtmlLoader:
                 Document(
                     page_content=content,
                     metadata={
+                        "id": str(part_div.get("id")),
                         "url": url,
                         "reference": url + "#" + str(part_div.get("id")),
                         "heararchy": " > ".join(parent_headings),
                         "title": self._extract_part_div_title(part_div),
                         #"change_history": self._extract_change_history(part_div),
-                        "effective_from": effective_from,
-                        "effective_to": effective_to,
+                        "effective_from": self.date_str_to_int(effective_from),
+                        "effective_to": self.date_str_to_int(effective_to),
                     }
                 )
             )
@@ -168,6 +169,10 @@ class ESeimasHtmlLoader:
                     effective_to=effective_to
                 )
 
+    def date_str_to_int(self, date_str):
+        if date_str is None:
+            return 30000000  # far future
+        return int(date_str.replace("-", ""))
 
     def _get_full_text(self, part_div: Tag) -> List[str]:
         """
@@ -183,7 +188,7 @@ class ESeimasHtmlLoader:
             if (
                 child.name == "p"
                 # and "MsoNormal" in (child.get("class") or [])
-                # and child.find("i") is None # skip change history
+                and child.find("i") is None # skip change history
             ):
                 # Replace <sup> tags with ^{text} in the text
                 # Replace <sup> tags with ^{text} in the text
@@ -197,14 +202,14 @@ class ESeimasHtmlLoader:
                     a.replace_with(replacement)
                 text = child.get_text("", strip=False)
                 if text.strip():
-                    result.append(text)
+                    result.append(text.strip())
             elif child.name == "table" and "MsoNormalTable" in (child.get("class") or []):
                 result.append(str(child))
             elif self._is_part_div(child) and not self._is_part_an_artice_or_has_article(child):
                 result.extend(self._get_full_text(child))
             elif self._is_part_div(child):
                 result.append(self._extract_part_div_title(child))
-            else:
+            elif child.name != "p":
                 result.append(child.get_text("", strip=False))
 
         return result
