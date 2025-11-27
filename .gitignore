@@ -1,3 +1,7 @@
+# ChromaDB data
+pm_chroma_db/
+# Environment variable files
+.env
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -75,6 +79,9 @@ cython_debug/
 
 # VS Code settings
 .vscode/
+
+# Streamlit config and cache
+.streamlit/
 
 # Local result/output files
 result.txt
