@@ -16,8 +16,6 @@ def get_embedding_model() -> OpenAIEmbeddings:
     return OpenAIEmbeddings(model="text-embedding-3-large")
 
 def prefill_rag(urls: List[str], db_name: str) -> None:
-    openai_api_key = st.secrets["OPENAI_API_KEY"]    
-    os.environ["OPENAI_API_KEY"] = openai_api_key
 
     embeddings = get_embedding_model()
     chunks = retrieve_chunks(urls)
@@ -77,9 +75,6 @@ def query_rag(query: str, date: str, db_name: str) -> List[Document]:
                 {"title": {"$ne": "Pakeitimai:"}}
             ]
         }
-
-    openai_api_key = st.secrets["OPENAI_API_KEY"]    
-    os.environ["OPENAI_API_KEY"] = openai_api_key
 
     embeddings = get_embedding_model()
     persist_directory = f"./{db_name}"
@@ -176,9 +171,6 @@ def retrieve_list_of_changes(date: str, db_name: str) -> List[dict]:
     filter = {
         "title": "Pakeitimai:"
     }
-
-    openai_api_key = st.secrets["OPENAI_API_KEY"]    
-    os.environ["OPENAI_API_KEY"] = openai_api_key
 
     embeddings = get_embedding_model()
     persist_directory = f"./{db_name}"
@@ -281,3 +273,34 @@ def resolve_latest_change_list(change_docs: Optional[List[Document]]) -> List[di
 
     return results
 
+def resolve_ranges_of_available_editions(db_name: str) -> List[dict]:
+    embeddings = get_embedding_model()
+    persist_directory = f"./{db_name}"
+
+    vector_store = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embeddings
+    )
+
+    filter = {
+        "title": "Pakeitimai:",
+        "chunk_number": 1
+    }
+
+    result = vector_store.get(where=filter)
+
+    documents = result['documents']
+    metadatas = result['metadatas']
+    if not documents:
+        return []
+
+    pairs = zip(documents, metadatas)
+
+    ranges = []
+
+    for _, meta in pairs:
+        eff_from = meta.get("effective_from")
+        eff_to = meta.get("effective_to")
+        ranges.append({"effective_from": eff_from, "effective_to": eff_to})
+
+    return ranges
