@@ -1,5 +1,6 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 from langChain_backend import get_openai_response
 import uuid
 
@@ -7,7 +8,7 @@ openai_api_key = st.secrets["OPENAI_API_KEY"]
 os.environ["OPENAI_API_KEY"] = openai_api_key
 
 def format_user_input(user_input):
-    return f"**You:** {user_input}"
+    return f"<b>Jūs:</b> {user_input}"
 
 def format_response(output_parsed):
     # output_parsed is of type Response, which has a list of Paragraphs
@@ -20,8 +21,11 @@ def format_response(output_parsed):
                 f'<a href="{ref}" target="_blank">{ref}</a>' for ref in para.references
             ]
             refs = "<br>".join(refs_list)
-            refs = f"<br><small>References:<br>{refs}</small>"
+            refs = f"<br><small>Šaltiniai:<br>{refs}</small>"
         formatted_paragraphs.append(f"{para.content}{refs}")
+
+    formatted_paragraphs[0] = f"<b>Asistentas:</b> {formatted_paragraphs[0]}"
+
     return "<br><br>".join(formatted_paragraphs)
 
 def on_user_input_change():
@@ -29,7 +33,7 @@ def on_user_input_change():
         return
     
     st.session_state.chat_history_raw.append({"role": "user", "content": st.session_state.user_input})
-    st.session_state.chat_history_display.append(st.session_state.user_input)
+    st.session_state.chat_history_display.append(format_user_input(st.session_state.user_input))
 
     response = get_openai_response(
         st.session_state.chat_history_raw,
@@ -38,11 +42,13 @@ def on_user_input_change():
 
     st.session_state.chat_history_raw.append({"role": "assistant", "content": response["output_text"]})    
     st.session_state.chat_history_display.append(format_response(response["output_parsed"]))
+    st.session_state.execution_trace = response["execution_trace"]
     st.session_state.user_input = ""
 
 def on_interview_start():
     st.session_state.chat_history_raw = []
     st.session_state.chat_history_display = []
+    st.session_state.execution_trace = []
     st.session_state.in_conversation = True
     st.session_state.user_input = ""
     st.session_state.input = {
@@ -75,31 +81,102 @@ if "in_conversation" not in st.session_state:
 if "input" not in st.session_state:
     on_interview_start()
 
-st.title("Pelno mokesčio įstatymo pokalbių asistentas")
+if "execution_trace" not in st.session_state:
+    st.session_state.execution_trace = []
 
-# if st.session_state.in_conversation == False:
-#     st.markdown(f"**Model parameters**")
-#     st.slider('Temperature', min_value=0.0, max_value=2.0, value=0.7, step=0.1, key="temperature")
-#     st.slider("top_p", min_value=0.0, max_value=1.0, value=1.0, step=0.1, key="top_p")
-#     st.selectbox("Select model", ["gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-3.5-turbo"], key="model")
-#     st.markdown(f"**Interview parameters**")
-#     st.slider('Number of questions', min_value=1, max_value=10, value=3, step=1, key="number_of_questions")
-#     st.text_input("What position are you interviewing for?", key="position")
-#     st.text_input("What industry/company is the job in?", key="industry")
-#     st.button("Start Interview", on_click=on_interview_start)
-# else:    
-# st.button("Start new interview", on_click=on_interview_end)
-st.markdown(f"**Asistentas:** Sveiki, kaip galiu jums padėti?")
+# --- Small header at the top ---
+st.markdown('<div style="font-size:1.1rem;font-weight:600;padding:0.5rem 0 0.5rem 1rem;background:#f5f5f5;border-bottom:1px solid #ddd;">Pelno mokesčio įstatymo pokalbių asistentas</div>', unsafe_allow_html=True)
 
-for msg in st.session_state.chat_history_display:
-    st.markdown(msg.replace("\n", "<br>"), unsafe_allow_html=True)
 
-st.text_area("Type your message...", key="user_input", on_change=on_user_input_change)
 
+# --- Scrollable chat area with fixed height, using components.html for reliable JS execution ---
+chat_html = ""
+if not st.session_state.chat_history_display:
+    chat_html += "<p><i>Sveiki, aš esu pelno mokesčio įstatymo pokalbių asistentas, kaip galiu jums padėti?</i></p>"
+else:
+    for msg in st.session_state.chat_history_display:
+        chat_html += f'<div style="margin-bottom:1em;">{msg.replace("\n", "<br>")}</div>'
+
+components.html(
+    f'''
+    <style>
+    #chat-history {{
+        font-family: "Inter", "system-ui", "Segoe UI", Arial, sans-serif;
+        font-size: 1rem;
+        color: #262730;
+    }}
+    #chat-history a {{
+        color: #2471c8;
+        text-decoration: underline;
+        word-break: break-all;
+        transition: color 0.2s;
+    }}
+    #chat-history a:hover {{
+        color: #174a8b;
+    }}
+    #chat-history b {{
+        color: #262730;
+    }}
+    </style>
+    <div id="chat-history" style="height:350px;overflow-y:auto;padding:1rem 1rem 0.5rem 1rem;background:#fff;border-bottom:1px solid #eee;">
+        {chat_html}
+    </div>
+    <script>
+    setTimeout(function() {{
+      var chatHistory = document.getElementById('chat-history');
+      if (chatHistory) {{ chatHistory.scrollTop = chatHistory.scrollHeight; }}
+    }}, 100);
+    </script>
+    ''',
+    height=370
+)
+
+
+# --- Input area at the bottom ---
+st.text_area("Type your message...", key="user_input", on_change=on_user_input_change, label_visibility="collapsed")
+
+# --- Execution trace scrollable area below input ---
+if "execution_trace" not in st.session_state:
+    st.session_state.execution_trace = []
+
+trace_html = ""
+for trace in st.session_state.execution_trace:
+    trace_html += f'<div style="margin-bottom:0.5em;">{trace.replace("\n", "<br>")}</div>'
+
+components.html(
+    f'''
+    <style>
+    #trace-history {{
+        font-family: "Inter", "system-ui", "Segoe UI", Arial, sans-serif;
+        font-size: 0.75rem;
+        color: #444;
+        background: #f8f9fa;
+    }}
+    #trace-history code {{
+        font-family: "Fira Mono", "Consolas", "monospace";
+        background: #eef2f6;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-size: 0.95em;
+    }}
+    </style>
+    <div id="trace-history" style="height:240px;overflow-y:auto;padding:0.7rem 1rem 0.7rem 1rem;border-top:1px solid #eee;border-bottom:1px solid #eee;">{trace_html}</div>
+    <script>
+    setTimeout(function() {{
+      var traceHistory = document.getElementById('trace-history');
+      if (traceHistory) {{ traceHistory.scrollTop = traceHistory.scrollHeight; }}
+    }}, 100);
+    </script>
+    ''',
+    height=280
+)
+
+# --- Auto-scroll chat to bottom ---
 st.markdown(
     """
     <script>
-    document.querySelector('div.st-key-user_input input').focus();
+    var chatHistory = document.getElementById('chat-history');
+    if (chatHistory) { chatHistory.scrollTop = chatHistory.scrollHeight; }
     </script>
     """,
     unsafe_allow_html=True

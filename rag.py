@@ -283,8 +283,10 @@ def resolve_ranges_of_available_editions(db_name: str) -> List[dict]:
     )
 
     filter = {
-        "title": "Pakeitimai:",
-        "chunk_number": 1
+        "$and": [
+            {"title": {"$eq": "Pakeitimai:"}},
+            {"chunk_number": {"$eq": 1}}
+        ]
     }
 
     result = vector_store.get(where=filter)
@@ -301,6 +303,18 @@ def resolve_ranges_of_available_editions(db_name: str) -> List[dict]:
     for _, meta in pairs:
         eff_from = meta.get("effective_from")
         eff_to = meta.get("effective_to")
-        ranges.append({"effective_from": eff_from, "effective_to": eff_to})
+        eff_from_str = str(eff_from)
+        eff_to_str = str(eff_to)
+        eff_from_fmt = f"{eff_from_str[:4]}-{eff_from_str[4:6]}-{eff_from_str[6:]}" if eff_from_str and len(eff_from_str) == 8 else None
+        eff_to_fmt = f"{eff_to_str[:4]}-{eff_to_str[4:6]}-{eff_to_str[6:]}" if eff_to_str and len(eff_to_str) == 8 else None
+        if eff_to == 30000000:
+            title = f"Suvestinė redakcija nuo {eff_from_fmt}"
+        else:
+            title = f"Suvestinė redakcija nuo {eff_from_fmt} iki {eff_to_fmt}"
+        ranges.append({
+            "title": title,
+            "effective_from": eff_from_fmt,
+            "effective_to": eff_to_fmt
+        })
 
     return ranges
