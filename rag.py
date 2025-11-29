@@ -1,14 +1,11 @@
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
-import os
 from langchain_openai import OpenAIEmbeddings
-import streamlit as st
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
 from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from chromadb.types import Metadata
 
 from ESeimasHtmlLoader import ESeimasHtmlLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 import re
 from datetime import datetime, timedelta
 
@@ -35,8 +32,34 @@ def prefill_rag(urls: List[str], db_name: str) -> None:
         embedding=embeddings,
         persist_directory=persist_directory
     )
+
+    vectordb = Chroma(
+        collection_name=f"{db_name}",
+        embedding_function=embeddings,
+        persist_directory=persist_directory,
+    )
     
-    print(f"ChromaDB stored at {persist_directory}")
+    def build_id_from_doc(doc: Document) -> str:
+        m = doc.metadata
+        # Pvz. PMI-5-1-2024-01-01
+        return f'{m["reference"]}-{m["chunk_number"]}'
+
+    texts = [d.page_content for d in chunks]
+    metadatas: List[Metadata] = [
+        d.metadata
+        for d in chunks
+    ]
+    ids = [build_id_from_doc(d) for d in chunks]
+
+    collection = vectordb._collection
+
+    collection.upsert(
+        ids=ids,
+        documents=texts,
+        metadatas=metadatas,
+    )
+
+    print(f"Prefilled RAG database '{db_name}' with {len(chunks)} chunks.")
 
 def retrieve_chunks(urls: List[str]) -> List[Document]:
     loader = ESeimasHtmlLoader()
@@ -71,7 +94,7 @@ def query_rag(query: str, date: str, db_name: str) -> List[Document]:
     filter = {
             "$and": [
                 {"effective_from": {"$lte": date_int}},
-                {"effective_to": {"$gt": date_int}},
+                {"effective_to": {"$gte": date_int}},
                 {"title": {"$ne": "Pakeitimai:"}}
             ]
         }
@@ -126,13 +149,45 @@ def resolve_full_document_by_reference(vector_store: Chroma, id: str, date_int: 
         "$and": [
             {"id": id},
             {"effective_from": {"$lte": date_int}},            
-            {"effective_to": {"$gt": date_int}}
+            {"effective_to": {"$gte": date_int}}
         ]
     }
 
     result = vector_store.get(where=where)
 
     print(f"Resolving full document for reference {id}, found {len(result['documents'])} chunks.")
+
+    return merge_chunks_to_single_document(result)
+
+def resolve_full_document_by_article_no(no: str, date: str, db_name: str) -> Optional[Document]:
+    date_int = int(date.replace("-", ""))
+
+    # Convert 23.2(1) to 23.2-1
+    no = re.sub(r'^(\d+\.\d+)\((\d+)\)$', r'\1-\2', no)
+
+    embeddings = get_embedding_model()
+    persist_directory = f"./{db_name}"
+
+    vector_store = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embeddings
+    )
+
+    # Only filter by reference in the query
+    where = {
+        "$and": [
+            {"article_no": no},
+            {"effective_from": {"$lte": date_int}},            
+            {"effective_to": {"$gte": date_int}}
+        ]
+    }
+
+    result = vector_store.get(where=where)
+
+    print(f"Resolving full document for article no: {no}, found {len(result['documents'])} chunks.")
+
+    if len(result['documents']) == 0:
+        return None
 
     return merge_chunks_to_single_document(result)
 

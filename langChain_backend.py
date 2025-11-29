@@ -1,3 +1,4 @@
+from tiktoken_utils import count_gpt_tokens, estimate_gpt_cost
 from datetime import datetime
 #from openai import OpenAI
 import os
@@ -41,6 +42,7 @@ Taisyklės:
 - Jei reikia, naudok įrankį, kad sužinotum įstatymo tekstą pagal URL.
 - Jei reikia, naudok įrankį, kad sužinotum įstatymo pakeitimus, galiojančius nurodytą datą.
 - Jei reikia, naudok įrankį, kad sužinotum aktualią informaciją iš RAG duomenų bazės pagal užklausą ir datą. 
+- Jei reikia, naudok įrankį, kad sužinotum pilną straipsnio tekstą pagal straipsnio numerį ir datą.
 - Jei neaiški aktuali data, klausk vartotojo patikslinimo.
 - Atsakyk trumpai ir aiškiai į vartotojo užduodamus klausimus pagal pateiktą informaciją.
 - Remkis tik per tools pateikta informacija. Jei informacijos nepakanka, atsakyk trumpai, kad neturi pakankamai duomenų atsakyti į klausimą.
@@ -59,7 +61,7 @@ def get_openai_response(
         parameters):
 
     model = init_chat_model(
-        f"openai:gpt-4.1",
+        f"openai:gpt-5-mini",
        # temperature=parameters["temperature"],
        # top_p=parameters["top_p"]
     )
@@ -69,7 +71,14 @@ def get_openai_response(
         system_prompt=prompts[-1]["content"],
         response_format=Response,
         checkpointer=checkpointer,
-        tools=[retrieve_pm_context, get_current_date, retrieve_law_changes, retrieve_law_text, retrieve_date_ranges_of_available_law_editions]
+        tools=[
+            retrieve_pm_context, 
+            get_current_date, 
+            retrieve_law_changes, 
+            retrieve_law_text, 
+            retrieve_date_ranges_of_available_law_editions,
+            retrieve_full_article_text_by_no
+        ],
     )
 
     result = agent.invoke(
@@ -93,10 +102,32 @@ def get_openai_response(
 
     raw_text = json.dumps(result['structured_response'].model_dump(), indent=2)
 
+    # Token counting and cost estimation
+    user_message = history[-1]["content"] if history and "content" in history[-1] else ""
+    assistant_message = raw_text
+    user_tokens = count_gpt_tokens(user_message)
+    assistant_tokens = count_gpt_tokens(assistant_message)
+    total_tokens = user_tokens + assistant_tokens
+    total_cost = estimate_gpt_cost(
+        input_tokens=user_tokens,
+        output_tokens=assistant_tokens,
+        model="gpt-4-1106-preview",  # or your actual model name
+        input_price_per_million=0.25,  # adjust as needed
+        output_price_per_million=2.00  # adjust as needed
+    )
+
     return {
         "output_text": raw_text,
         "output_parsed": result['structured_response'],
-        "execution_trace": execution_trace
+        "execution_trace": execution_trace,
+        "token_usage": {
+            "user_tokens": user_tokens,
+            "assistant_tokens": assistant_tokens,
+            "total_tokens": total_tokens,
+            "input_cost": (user_tokens / 1_000_000) * 0.25,
+            "output_cost": (assistant_tokens / 1_000_000) * 2.00,
+            "total_cost": total_cost
+        }
     }
 
 @tool(response_format="content_and_artifact")
@@ -208,3 +239,22 @@ def retrieve_date_ranges_of_available_law_editions():
     serialized = json.dumps(ranges, ensure_ascii=False, indent=2)
 
     return serialized
+
+@tool(response_format="content")
+def retrieve_full_article_text_by_no(article_no: str, date: str):
+    """
+    Grąžina pilną straipsnio tekstą pagal straipsnio numerį ir datą.
+    Naudok šią funkciją, kai reikia gauti konkretaus straipsnio turinį pagal jo numerį ir datą.
+    article_no: Straipsnio numeris (pvz., "5", "10.1", "38-2", "37(1)" ir t.t.).
+    date: Data ISO formatu (YYYY-MM-DD) – nurodo, kuri įstatymo redakcija (aktuali įstatymo versija) turi būti taikoma ieškant straipsnio teksto.
+    Bus naudojama įstatymo redakcija, galiojanti nurodytą datą.
+    """
+    from rag import resolve_full_document_by_article_no
+
+    article_text = resolve_full_document_by_article_no(
+        article_no,
+        date,
+        "pm_chroma_db"
+    )
+
+    return article_text

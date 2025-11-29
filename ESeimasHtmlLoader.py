@@ -6,39 +6,6 @@ from bs4 import BeautifulSoup, Tag
 from langchain_core.documents import Document
 import re
 
-def resolve_effective_dates(top_parts: List[Tag]) -> tuple[Optional[str], Optional[str]]:
-    if len(top_parts) == 0:
-        return (None, None)
-
-    first_part = top_parts[0]
-
-    # Find the first direct <p> tag whose text starts with "Suvestinė redakcija nuo"
-    effective_period_text = None
-    for child in first_part.children:
-        if isinstance(child, Tag) and child.name == "p":
-            text = child.get_text(strip=True)
-            if text.startswith("Suvestinė redakcija nuo"):
-                effective_period_text = text
-                break
-
-    if effective_period_text is None:
-        return (None, None)
-    
-    # Extract dates using regex
-    m = re.match(
-        r"Suvestinė redakcija nuo (\d{4}-\d{2}-\d{2})(?: iki (\d{4}-\d{2}-\d{2}))?",
-        effective_period_text
-    )
-    if m:
-        effective_from = m.group(1)
-        effective_to = m.group(2) if m.group(2) else None
-        return (effective_from, effective_to)
-    
-    return (None, None)
-
-
-
-
 class ESeimasHtmlLoader:
     """
     Iš e-seimas.lrs.lt HTML struktūros (div.WordSection1 > div#part...)
@@ -68,7 +35,7 @@ class ESeimasHtmlLoader:
 
         top_parts = root.find_all(self._is_part_div, recursive=False)
 
-        (effective_from, effective_to) = resolve_effective_dates(top_parts)
+        (effective_from, effective_to) = self._resolve_effective_dates(top_parts)
 
         # top-level part'ai WordSection1 viduje
         for top_part in top_parts:
@@ -85,6 +52,36 @@ class ESeimasHtmlLoader:
         return docs
 
     # --- vidinės pagalbinės funkcijos ---
+
+    def _resolve_effective_dates(self, top_parts: List[Tag]) -> tuple[Optional[str], Optional[str]]:
+        if len(top_parts) == 0:
+            return (None, None)
+
+        first_part = top_parts[0]
+
+        # Find the first direct <p> tag whose text starts with "Suvestinė redakcija nuo"
+        effective_period_text = None
+        for child in first_part.children:
+            if isinstance(child, Tag) and child.name == "p":
+                text = child.get_text(strip=True)
+                if text.startswith("Suvestinė redakcija nuo"):
+                    effective_period_text = text
+                    break
+
+        if effective_period_text is None:
+            return (None, None)
+        
+        # Extract dates using regex
+        m = re.match(
+            r"Suvestinė redakcija nuo (\d{4}-\d{2}-\d{2})(?: iki (\d{4}-\d{2}-\d{2}))?",
+            effective_period_text
+        )
+        if m:
+            effective_from = m.group(1)
+            effective_to = m.group(2) if m.group(2) else None
+            return (effective_from, effective_to)
+        
+        return (None, None)
 
     def _download(self, url: str) -> str:
         headers = {
@@ -149,6 +146,7 @@ class ESeimasHtmlLoader:
                         "reference": url + "#" + str(part_div.get("id")),
                         "heararchy": " > ".join(parent_headings),
                         "title": self._extract_part_div_title(part_div),
+                        "article_no": self._extract_part_div_article_no(part_div),
                         #"change_history": self._extract_change_history(part_div),
                         "effective_from": self.date_str_to_int(effective_from),
                         "effective_to": self.date_str_to_int(effective_to),
@@ -190,10 +188,7 @@ class ESeimasHtmlLoader:
                 # and "MsoNormal" in (child.get("class") or [])
                 and child.find("i") is None # skip change history
             ):
-                # Replace <sup> tags with ^{text} in the text
-                # Replace <sup> tags with ^{text} in the text
-                for sup in child.find_all("sup"):
-                    sup.replace_with(f"^{sup.get_text(strip=True)}")
+                self._normalize_sup(child)
                 # Replace <a> tags with text[href="url"]
                 for a in child.find_all("a"):
                     link_text = a.get_text(strip=True)
@@ -213,6 +208,14 @@ class ESeimasHtmlLoader:
                 result.append(child.get_text("", strip=False))
 
         return result
+    
+    def _normalize_sup(self, p_tag: Tag) -> None:
+        # Replace <sup> tags with -{text} in the text
+        for sup in p_tag.find_all("sup"):
+            sup_text = sup.get_text(strip=True)
+            # Remove parentheses if present, e.g., (2) -> 2
+            sup_text = sup_text.strip("()")
+            sup.replace_with(f"-{sup_text}")
     
     def _extract_change_history(self, part_div: Tag) -> List[dict]:
         """
@@ -302,7 +305,7 @@ class ESeimasHtmlLoader:
         """
         Patikrinam ar straipsnis. Skaidom iki straipsnio lygio.
         """
-        if re.match(r"^\d+(\.\d+|\(\d\)| \d)* straipsnis", self._extract_part_div_title(part_div).lower()):
+        if self._extract_part_div_article_no(part_div) is not None:
             return True
 
         for child in part_div.children:
@@ -330,22 +333,28 @@ class ESeimasHtmlLoader:
                         break  # Stop if p with other class
                 else:
                     break  # Stop if any other element
-
-        # header_p_tags = list(iter_direct_msonormal_p(part_div))
-
-        # b_elements_texts = []
-        # for p in header_p_tags:
-        #     b_elements_texts.append(
-        #         "".join(b.get_text(strip=False) for b in [bb for bb in p.find_all("b") if not bb.find_all("i")]).strip())
-            
-        # return " ".join(b for b in b_elements_texts if b).strip()
     
         header_p_tags = [p for p in iter_direct_msonormal_p(part_div) if p.find("b", recursive=True) and not p.find("i", recursive=True)]
 
         p_elements_texts = []
         for p in header_p_tags:
-            p_elements_texts.append(
-                p.get_text(" ", strip=True).strip()
-            )
+            self._normalize_sup(p)
+            text = p.get_text(" ", strip=True)
+            # Remove space between number patterns at the start, e.g., 37 -1 -> 37-1, 37.1 -2 -> 37.1-2
+            text = re.sub(r"^(\d+(?:[.-]\d+)*)( )-(\d+)", r"\1-\3", text)
+            p_elements_texts.append(text)
             
-        return " ".join(b for b in p_elements_texts if b).strip()
+        return " ".join(p for p in p_elements_texts if p).strip()
+    
+    def _extract_part_div_article_no(self, part_div: Tag) -> Optional[str]:
+        """
+        Ištraukia part_div straipsnio numerį iš antraštės.
+        Grąžina None jei nėra straipsnio numerio.
+        """
+        title = self._extract_part_div_title(part_div)
+
+        m = re.match(r"^(\d+(?:[.-]\d+|\(\d+\))*) straipsnis", title.lower())
+        if m:
+            return m.group(1)
+        
+        return None
