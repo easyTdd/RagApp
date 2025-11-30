@@ -1,3 +1,4 @@
+# streamlit: title = "Duomenų importavimas"
 import streamlit as st
 from rag import prefill_rag
 
