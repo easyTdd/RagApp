@@ -4,26 +4,39 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 from ESeimasAgent import ESeimasAgent
-
-if "eseimas_agent" not in st.session_state:
-    st.session_state.eseimas_agent = ESeimasAgent(db_name="pm_chroma_db", law_name="Pelno mokesčio įstatymas")
-
-eseimas_agent = st.session_state.eseimas_agent
 import uuid
 import logging
 
 # Set up logging
+# Set up logging to both file and terminal
 logging.basicConfig(
-    filename="app.log",
     level=logging.ERROR,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    encoding="utf-8"
+    encoding="utf-8",
+    handlers=[
+        logging.FileHandler("app.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
 )
 import traceback
 from datetime import datetime
 
-openai_api_key = st.secrets["OPENAI_API_KEY"]    
-os.environ["OPENAI_API_KEY"] = openai_api_key
+st.set_page_config(page_title="Pokalbių asistentas")
+
+eseimas_agent = None
+
+if "eseimas_agent" not in st.session_state:
+    try:
+        openai_api_key = st.secrets["OPENAI_API_KEY"]    
+        os.environ["OPENAI_API_KEY"] = openai_api_key
+    
+        st.session_state.eseimas_agent = ESeimasAgent(db_name="pm_chroma_db", law_name="Pelno mokesčio įstatymas")
+
+        eseimas_agent = st.session_state.eseimas_agent
+
+    except Exception as e:
+        st.error("Įvyko klaida inicializuojant aplikaciją.")
+        logging.error("Exception initializing app: %s", traceback.format_exc())
 
 def format_user_input(user_input):
     return f"<b>Jūs:</b> {user_input}"
@@ -47,6 +60,14 @@ def format_response(output_parsed):
     return "<br><br>".join(formatted_paragraphs)
 
 def on_user_input_change():
+
+    if "eseimas_agent" not in st.session_state:
+        st.error("Įvyko klaida apdorojant užklausą.")
+        logging.error("ESeimasAgent not initialized in session state.")
+        return
+    
+    eseimas_agent = st.session_state.eseimas_agent
+
     try:
         # --- Rate limiting: max 5 requests per 60 seconds per session ---
         now = datetime.now()
@@ -277,7 +298,5 @@ if "input" not in st.session_state:
 
 if "execution_trace" not in st.session_state:
     st.session_state.execution_trace = []
-
-st.set_page_config(page_title="Pokalbių asistentas")
 
 render_UI()

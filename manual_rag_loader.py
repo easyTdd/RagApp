@@ -9,6 +9,13 @@ import os
 # psdReferalUrl = "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.28356/bDHXHxxPqm"
 # ckReferalUrl = "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.107687/XBdbMIpvQc"
 
+"""
+https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/lRPSSghBrM
+https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/sEicFwzxgj
+https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/AKYcONSsXt
+https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/OJIyjmFAua
+"""
+
 pmEditions = [
     "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/lRPSSghBrM",
     "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/sEicFwzxgj",
@@ -16,7 +23,7 @@ pmEditions = [
     "https://e-seimas.lrs.lt/portal/legalAct/lt/TAD/TAIS.157066/OJIyjmFAua"
 ]
 
-openai_api_key = st.secrets["OPENAI_API_KEY"]    
+openai_api_key = st.secrets["OPENAI_API_KEY"]
 os.environ["OPENAI_API_KEY"] = openai_api_key
 
 
