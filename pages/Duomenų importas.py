@@ -1,6 +1,19 @@
 # streamlit: title = "Duomenų importavimas"
+import traceback
 import streamlit as st
 from Store import Store
+import logging
+
+logging.basicConfig(
+    level=logging.ERROR,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    encoding="utf-8",
+    handlers=[
+        logging.FileHandler("app.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+
 store = Store("pm_chroma_db")
 
 st.set_page_config(page_title="Duomenų importavimas")
@@ -27,3 +40,4 @@ if st.button("Atnaujinti žinių bazę"):
                 st.success("Žinių bazė sėkmingai atnaujinta!")
             except Exception as e:
                 st.error(f"Klaida atnaujinant: {e}")
+                logging.error("Exception in data import: %s", traceback.format_exc())
