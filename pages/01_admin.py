@@ -1,7 +1,7 @@
-# streamlit: title = "Duomenų importavimas"
 import streamlit as st
 from rag import prefill_rag
 
+st.set_page_config(page_title="Duomenų importavimas")
 st.title("Žinių bazės atnaujinimas (Admin)")
 
 # Simple password protection (for demo purposes)

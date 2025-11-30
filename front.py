@@ -1,4 +1,3 @@
-# streamlit: title = "Pokalbių asistentas"
 import os
 import re
 import streamlit as st
@@ -263,5 +262,7 @@ if "input" not in st.session_state:
 
 if "execution_trace" not in st.session_state:
     st.session_state.execution_trace = []
+
+st.set_page_config(page_title="Pokalbių asistentas")
 
 render_UI()
