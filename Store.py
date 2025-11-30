@@ -54,10 +54,11 @@ class Store:
     def query(self, query: str, date: str) -> List[Document]:
         date_int = int(date.replace("-", ""))
         filter = {
-                "effective_from": {"$lte": date_int},
-                "effective_to": {"$gte": date_int},
-                "title": {"$ne": "Pakeitimai:"}
-            
+            "$and": [
+                {"effective_from": {"$lte": date_int}},
+                {"effective_to": {"$gte": date_int}},
+                {"title": {"$ne": "Pakeitimai:"}}
+            ]
         }
         vector_store = Chroma(
             persist_directory=self.persist_directory,
