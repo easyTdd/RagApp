@@ -1,3 +1,4 @@
+import os
 from typing import List, Dict, Any, Optional
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
@@ -8,16 +9,26 @@ from chromadb.types import Metadata
 from ESeimasHtmlLoader import ESeimasHtmlLoader
 import re
 from datetime import datetime, timedelta
+from collections import Counter
 
 class Store:
     def __init__(self, db_name: str):
         self.db_name = db_name
         self.persist_directory = f"./{db_name}"
         self.embeddings = self._get_embedding_model()
+
+        self._vector_store: Optional[Chroma] = None
+
+    def _get_vector_store(self) -> Optional[Chroma]:
+        if self._vector_store is not None:
+            return self._vector_store
+        if not os.path.exists(self.persist_directory):
+            return None
         self._vector_store = Chroma(
             persist_directory=self.persist_directory,
-            embedding_function=self.embeddings
+            embedding_function=self.embeddings,
         )
+        return self._vector_store
 
     def _get_embedding_model(self) -> OpenAIEmbeddings:
         return OpenAIEmbeddings(model="text-embedding-3-large")
@@ -31,24 +42,33 @@ class Store:
                 for key, value in doc.metadata.items():
                     f.write(f"{key}: {value}\n")
                 f.write("\n" + "-"*28 + "\n")
-        Chroma.from_documents(
-            documents=chunks,
-            embedding=self.embeddings,
-            persist_directory=self.persist_directory
-        )
-        vectordb = self._vector_store
+
         def build_id_from_doc(doc: Document) -> str:
             m = doc.metadata
             return f'{m["reference"]}-{m["chunk_number"]}'
-        texts = [d.page_content for d in chunks]
-        metadatas: List[Metadata] = [d.metadata for d in chunks]
+
         ids = [build_id_from_doc(d) for d in chunks]
-        collection = vectordb._collection
-        collection.upsert(
+
+        vectordb = Chroma.from_documents(
+            documents=chunks,
+            embedding=self.embeddings,
             ids=ids,
-            documents=texts,
-            metadatas=metadatas,
+            persist_directory=self.persist_directory,
         )
+        self._vector_store = vectordb
+
+        # Count duplicates in the database
+        # Count duplicates by 'id' field in metadata
+        all_metadatas = vectordb.get()['metadatas']
+        print(f"Total chunks in database: {len(all_metadatas)}")
+        ref_chunk_list = [
+            (meta.get('reference'), meta.get('chunk_number'))
+            for meta in all_metadatas
+            if meta.get('reference') is not None and meta.get('chunk_number') is not None
+        ]
+        ref_chunk_counts = Counter(ref_chunk_list)
+        duplicates = {key: count for key, count in ref_chunk_counts.items() if count > 1}
+        print(f"Found {len(duplicates)} duplicate (reference, chunk_number) pairs in the database.")
         print(f"Prefilled RAG database '{self.db_name}' with {len(chunks)} chunks.")
 
     def query(self, query: str, date: str) -> List[Document]:
@@ -60,7 +80,11 @@ class Store:
                 {"title": {"$ne": "Pakeitimai:"}}
             ]
         }
-        vector_store = self._vector_store
+        vector_store = self._get_vector_store()
+
+        if vector_store is None:
+            return []    
+
         result = vector_store.similarity_search_with_relevance_scores(query, k=10, filter=filter)
         top_ids = self._resolve_top_k_doc_ids(result, k=3)
         top_docs =[]
@@ -74,7 +98,11 @@ class Store:
     def resolve_full_document_by_article_no(self, no: str, date: str) -> Optional[Document]:
         date_int = int(date.replace("-", ""))
         no = re.sub(r'^(\d+\.\d+)\((\d+)\)$', r'\1-\2', no)
-        vector_store = self._vector_store
+        vector_store = self._get_vector_store()
+
+        if vector_store is None:
+            return None
+
         where = {
             "$and": [
                 {"article_no": no},
@@ -91,7 +119,10 @@ class Store:
     def retrieve_list_of_changes(self, date: str) -> List[dict]:
         date_int = int(date.replace("-", ""))
         filter = {"title": "Pakeitimai:"}
-        vector_store = self._vector_store
+        vector_store = self._get_vector_store()
+        if vector_store is None:
+            return []
+
         result = vector_store.get(where=filter)
         current_edition_change_docs = self._get_documents_by_effective_date(date_int, result)
         if not current_edition_change_docs:
@@ -117,7 +148,11 @@ class Store:
         return [doc for doc in self._resolve_latest_change_list(current_edition_change_docs) if doc["number"] > last_change]
 
     def resolve_ranges_of_available_editions(self) -> List[dict]:
-        vector_store = self._vector_store
+        vector_store = self._get_vector_store()
+
+        if vector_store is None:
+            return []
+        
         filter = {
             "$and": [
                 {"title": {"$eq": "Pakeitimai:"}},
