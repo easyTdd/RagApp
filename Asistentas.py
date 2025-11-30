@@ -3,7 +3,8 @@ import os
 import re
 import streamlit as st
 import streamlit.components.v1 as components
-from langChain_backend import get_openai_response
+from ESeimasAgent import ESeimasAgent
+eseimas_agent = ESeimasAgent(db_name="pm_chroma_db", law_name="Pelno mokesčio įstatymas")
 import uuid
 import logging
 
@@ -70,8 +71,8 @@ def on_user_input_change():
         st.session_state.chat_history_display.append(format_user_input(st.session_state.user_input))
 
         with st.spinner("Atsakymas generuojamas..."):
-            response = get_openai_response(
-                st.session_state.chat_history_raw,
+            response = eseimas_agent.get_agent_response(
+                st.session_state.chat_history_raw[-1],
                 parameters=st.session_state.input
             )
         st.session_state.chat_history_raw.append({"role": "assistant", "content": response["output_text"]})    

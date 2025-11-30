@@ -1,6 +1,7 @@
 # streamlit: title = "Duomenų importavimas"
 import streamlit as st
-from rag import prefill_rag
+from Store import Store
+store = Store("pm_chroma_db")
 
 st.set_page_config(page_title="Duomenų importavimas")
 st.title("Žinių bazės atnaujinimas (Admin)")
@@ -22,7 +23,7 @@ if st.button("Atnaujinti žinių bazę"):
     else:
         with st.spinner("Vyksta atnaujinimas..."):
             try:
-                prefill_rag(url_list, "pm_chroma_db")
+                store.prefill(url_list)
                 st.success("Žinių bazė sėkmingai atnaujinta!")
             except Exception as e:
                 st.error(f"Klaida atnaujinant: {e}")
