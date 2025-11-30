@@ -14,6 +14,10 @@ class Store:
         self.db_name = db_name
         self.persist_directory = f"./{db_name}"
         self.embeddings = self._get_embedding_model()
+        self._vector_store = Chroma(
+            persist_directory=self.persist_directory,
+            embedding_function=self.embeddings
+        )
 
     def _get_embedding_model(self) -> OpenAIEmbeddings:
         return OpenAIEmbeddings(model="text-embedding-3-large")
@@ -32,11 +36,7 @@ class Store:
             embedding=self.embeddings,
             persist_directory=self.persist_directory
         )
-        vectordb = Chroma(
-            collection_name=f"{self.db_name}",
-            embedding_function=self.embeddings,
-            persist_directory=self.persist_directory,
-        )
+        vectordb = self._vector_store
         def build_id_from_doc(doc: Document) -> str:
             m = doc.metadata
             return f'{m["reference"]}-{m["chunk_number"]}'
@@ -60,10 +60,7 @@ class Store:
                 {"title": {"$ne": "Pakeitimai:"}}
             ]
         }
-        vector_store = Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embeddings
-        )
+        vector_store = self._vector_store
         result = vector_store.similarity_search_with_relevance_scores(query, k=10, filter=filter)
         top_ids = self._resolve_top_k_doc_ids(result, k=3)
         top_docs =[]
@@ -77,10 +74,7 @@ class Store:
     def resolve_full_document_by_article_no(self, no: str, date: str) -> Optional[Document]:
         date_int = int(date.replace("-", ""))
         no = re.sub(r'^(\d+\.\d+)\((\d+)\)$', r'\1-\2', no)
-        vector_store = Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embeddings
-        )
+        vector_store = self._vector_store
         where = {
             "$and": [
                 {"article_no": no},
@@ -97,10 +91,7 @@ class Store:
     def retrieve_list_of_changes(self, date: str) -> List[dict]:
         date_int = int(date.replace("-", ""))
         filter = {"title": "Pakeitimai:"}
-        vector_store = Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embeddings
-        )
+        vector_store = self._vector_store
         result = vector_store.get(where=filter)
         current_edition_change_docs = self._get_documents_by_effective_date(date_int, result)
         if not current_edition_change_docs:
@@ -126,10 +117,7 @@ class Store:
         return [doc for doc in self._resolve_latest_change_list(current_edition_change_docs) if doc["number"] > last_change]
 
     def resolve_ranges_of_available_editions(self) -> List[dict]:
-        vector_store = Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embeddings
-        )
+        vector_store = self._vector_store
         filter = {
             "$and": [
                 {"title": {"$eq": "Pakeitimai:"}},

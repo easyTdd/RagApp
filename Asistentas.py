@@ -4,7 +4,11 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 from ESeimasAgent import ESeimasAgent
-eseimas_agent = ESeimasAgent(db_name="pm_chroma_db", law_name="Pelno mokesčio įstatymas")
+
+if "eseimas_agent" not in st.session_state:
+    st.session_state.eseimas_agent = ESeimasAgent(db_name="pm_chroma_db", law_name="Pelno mokesčio įstatymas")
+
+eseimas_agent = st.session_state.eseimas_agent
 import uuid
 import logging
 
@@ -78,7 +82,16 @@ def on_user_input_change():
         st.session_state.chat_history_raw.append({"role": "assistant", "content": response["output_text"]})    
         st.session_state.chat_history_display.append(format_response(response["output_parsed"]))
         st.session_state.execution_trace = response["execution_trace"]
-        st.session_state.token_usage = response.get("token_usage", {})
+        # Sum token usage over the whole conversation
+        resp_token_usage = response.get("token_usage", {})
+        if "token_usage" not in st.session_state or not st.session_state.token_usage:
+            st.session_state.token_usage = resp_token_usage
+        else:
+            # Sum token counts and costs
+            for key in ["user_tokens", "assistant_tokens", "total_tokens"]:
+                st.session_state.token_usage[key] = st.session_state.token_usage.get(key, 0) + resp_token_usage.get(key, 0)
+            for key in ["input_cost", "output_cost", "total_cost"]:
+                st.session_state.token_usage[key] = st.session_state.token_usage.get(key, 0.0) + resp_token_usage.get(key, 0.0)
         st.session_state.user_input = ""
     except Exception as e:
         st.error("Įvyko klaida apdorojant užklausą.")
