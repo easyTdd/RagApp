@@ -41,7 +41,7 @@ class ESeimasAgent:
                     "- Jei reikia, naudok įrankį, kad sužinotum įstatymo pakeitimus, galiojančius nurodytą datą.\n"
                     "- Jei reikia, naudok įrankį, kad sužinotum aktualią informaciją iš RAG duomenų bazės pagal užklausą ir datą.\n"
                     "- Jei reikia, naudok įrankį, kad sužinotum pilną straipsnio tekstą pagal straipsnio numerį ir datą.\n"
-                    "- Jei neaiški aktuali data, klausk vartotojo patikslinimo.\n"
+                    "- Jei nieko neužsiminama apie laikotarpį, naudok dabartinę datą.\n"
                     "- Atsakyk trumpai ir aiškiai į vartotojo užduodamus klausimus pagal pateiktą informaciją.\n"
                     "- Remkis tik per tools pateikta informacija. Jei informacijos nepakanka, atsakyk trumpai, kad neturi pakankamai duomenų atsakyti į klausimą.\n"
                     "- Jei vartotojas užduoda klausimą ne apie įstatymus, mandagiai atsakyk, kad gali atsakyti tik į su įstatymais susijusius klausimus.\n"
