@@ -103,16 +103,8 @@ def on_user_input_change():
         st.session_state.chat_history_raw.append({"role": "assistant", "content": response["output_text"]})    
         st.session_state.chat_history_display.append(format_response(response["output_parsed"]))
         st.session_state.execution_trace = response["execution_trace"]
-        # Sum token usage over the whole conversation
-        resp_token_usage = response.get("token_usage", {})
-        if "token_usage" not in st.session_state or not st.session_state.token_usage:
-            st.session_state.token_usage = resp_token_usage
-        else:
-            # Sum token counts and costs
-            for key in ["user_tokens", "assistant_tokens", "total_tokens"]:
-                st.session_state.token_usage[key] = st.session_state.token_usage.get(key, 0) + resp_token_usage.get(key, 0)
-            for key in ["input_cost", "output_cost", "total_cost"]:
-                st.session_state.token_usage[key] = st.session_state.token_usage.get(key, 0.0) + resp_token_usage.get(key, 0.0)
+        # Use the latest token usage (already cumulative for the conversation)
+        st.session_state.token_usage = response.get("token_usage", {})
         st.session_state.user_input = ""
     except Exception as e:
         st.error("Įvyko klaida apdorojant užklausą.")
@@ -166,8 +158,8 @@ def render_UI():
             color: #174a8b;
             font-size: 0.98rem;
             ">
-            <b>Naudotojo žinutė:</b> {tu.get('user_tokens', 0)} tokenų (kaina: {input_cost_str} USD)<br>
-            <b>Atsakymas:</b> {tu.get('assistant_tokens', 0)} tokenų (kaina: {output_cost_str} USD)<br>
+            <b>Įvesties tokenai:</b> {tu.get('input_tokens', 0)} tokenų (kaina: {input_cost_str} USD)<br>
+            <b>Atsakymo tokenai:</b> {tu.get('output_tokens', 0)} tokenų (kaina: {output_cost_str} USD)<br>
             <b>Viso:</b> {tu.get('total_tokens', 0)} tokenų | <b>Bendra kaina:</b> {total_cost_str} USD
             </div>
             """,

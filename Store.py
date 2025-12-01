@@ -281,10 +281,9 @@ class Store:
             return []
         sorted_docs = sorted(
             change_docs,
-            key=lambda doc: doc.metadata.get("chunk_number", 0),
-            reverse=True
+            key=lambda doc: doc.metadata.get("chunk_number", 0)
         )
-        last_changes = "\n".join(doc.page_content for doc in sorted_docs[:2])
+        last_changes = "\n".join(doc.page_content for doc in sorted_docs[-2:])
         pattern = re.compile(
             r'(?P<number>\d+)\.\n'
             r'(?P<text1>.+?)\n'

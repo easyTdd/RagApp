@@ -1,4 +1,4 @@
-from tiktoken_utils import count_gpt_tokens, estimate_gpt_cost
+from LangChainTokenUsageCalculator import LangChainTokenUsageCalculator
 from datetime import datetime
 from pydantic import BaseModel
 from typing import List, Optional
@@ -54,6 +54,10 @@ class ESeimasAgent:
             }
         ]
         self._init_tools()
+        # Token usage calculator instance (LangChain-specific)
+        self.token_calculator = LangChainTokenUsageCalculator(
+            model="gpt-5-mini"
+        )
 
     def _init_tools(self):
         agent = self
@@ -168,9 +172,11 @@ class ESeimasAgent:
         ]
 
     def get_agent_response(self, message, parameters):
+
         model = init_chat_model(
             f"openai:gpt-5-mini",
         )
+
         agent = create_agent(
             model=model,
             system_prompt=self.prompts[-1]["content"],
@@ -178,13 +184,17 @@ class ESeimasAgent:
             checkpointer=self.checkpointer,
             tools=self.tools,
         )
+
         result = agent.invoke(
             {"messages": [message]},
             config={"configurable": {"thread_id": parameters["thread_id"]}}
         )
+
         for msg in result["messages"]:
             msg.pretty_print()
+
         execution_trace = []
+
         from contextlib import redirect_stdout     
         buf = StringIO()
         for msg in result["messages"]:   
@@ -194,29 +204,30 @@ class ESeimasAgent:
                 execution_trace.append(pretty_text)
                 buf.truncate(0)
                 buf.seek(0)
+
+
+        # Build message list for token calculation (simulate OpenAI/ChatML format)
+        # result["messages"] is assumed to be a list of message objects with .type and .content
+        # Build system content for token calculations
+        try:
+            system_content = self.prompts[-1]["content"] if hasattr(self, 'prompts') and self.prompts else ""
+        except Exception:
+            system_content = ""
+
+        # Final assistant response text (kept for return/presentation)
         raw_text = json.dumps(result['structured_response'].model_dump(), indent=2)
-        user_message = message["content"] if message and "content" in message else ""
-        assistant_message = raw_text
-        user_tokens = count_gpt_tokens(user_message)
-        assistant_tokens = count_gpt_tokens(assistant_message)
-        total_tokens = user_tokens + assistant_tokens
-        total_cost = estimate_gpt_cost(
-            input_tokens=user_tokens,
-            output_tokens=assistant_tokens,
-            model="gpt-5-mini",
-            input_price_per_million=0.25,
-            output_price_per_million=2.00
+
+        # Compute token usage and costs via LangChainTokenUsageCalculator
+        # Note: calculator uses canonical `result["messages"]` only; do not
+        # pass the serialized assistant response again to avoid double-counting.
+        token_usage = self.token_calculator.compute(
+            result_messages=result["messages"],
+            system_content=system_content,
         )
+
         return {
             "output_text": raw_text,
             "output_parsed": result['structured_response'],
             "execution_trace": execution_trace,
-            "token_usage": {
-                "user_tokens": user_tokens,
-                "assistant_tokens": assistant_tokens,
-                "total_tokens": total_tokens,
-                "input_cost": (user_tokens / 1_000_000) * 0.25,
-                "output_cost": (assistant_tokens / 1_000_000) * 2.00,
-                "total_cost": total_cost
-            }
+            "token_usage": token_usage,
         }
