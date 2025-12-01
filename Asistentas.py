@@ -106,6 +106,28 @@ def on_user_input_change():
         # Use the latest token usage (already cumulative for the conversation)
         st.session_state.token_usage = response.get("token_usage", {})
         st.session_state.user_input = ""
+
+        # Print all timings if present in response
+        if "timings" in response:
+            timings = response["timings"]
+            st.session_state.execution_trace.append(
+            f"<b>Laiko statistika:</b> bendras laikas: {timings.get('total_time', 0):.2f}s"
+            )
+            tool_timings = timings.get("tool_timings", {})
+            if tool_timings:
+                for tt in tool_timings:
+                    st.session_state.execution_trace.append(
+                        f"&nbsp;&nbsp;<i>{tt["tool"]}:</i> {tt["time"]:.2f}s"
+                    )
+            
+            step_timing = timings.get("step_timing", {})
+            if step_timing and isinstance(step_timing, dict):
+                st.session_state.execution_trace.append("<b>Veiksmų laikas:</b>")
+                for step, timing in step_timing.items():
+                    st.session_state.execution_trace.append(
+                        f"&nbsp;&nbsp;<i>{step}:</i> {timing:.3f}s"
+                    )
+
     except Exception as e:
         st.error("Įvyko klaida apdorojant užklausą.")
         logging.error("Exception in on_user_input_change: %s", traceback.format_exc())

@@ -1,0 +1,25 @@
+2025-12-01 14:00:32,513 [ERROR] Exception in on_user_input_change: Traceback (most recent call last):
+  File "C:\Users\User\Documents\Repositories\AI Engineering\RAGApp\Asistentas.py", line 99, in on_user_input_change
+    response = eseimas_agent.get_agent_response(
+        st.session_state.chat_history_raw[-1],
+        parameters=st.session_state.input
+    )
+  File "C:\Users\User\Documents\Repositories\AI Engineering\RAGApp\ESeimasAgent.py", line 225, in get_agent_response
+    token_usage = self.token_calculator.compute(
+        result_messages=result["messages"],
+        system_content=system_content,
+    )
+TypeError: LangChainTokenUsageCalculator.compute() got an unexpected keyword argument 'system_content'
+
+2025-12-01 14:16:15,223 [ERROR] Exception in on_user_input_change: Traceback (most recent call last):
+  File "C:\Users\User\Documents\Repositories\AI Engineering\RAGApp\Asistentas.py", line 118, in on_user_input_change
+    for tool, t in tool_timings.items():
+                   ^^^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'items'
+
+2025-12-01 14:19:13,509 [ERROR] Exception in on_user_input_change: Traceback (most recent call last):
+  File "C:\Users\User\Documents\Repositories\AI Engineering\RAGApp\Asistentas.py", line 120, in on_user_input_change
+    f"&nbsp;&nbsp;<i>{tt.tool}:</i> {tt.time:.2f}s"
+                      ^^^^^^^
+AttributeError: 'dict' object has no attribute 'tool'
+

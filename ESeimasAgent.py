@@ -1,5 +1,6 @@
 from LangChainTokenUsageCalculator import LangChainTokenUsageCalculator
 from datetime import datetime
+import time
 from pydantic import BaseModel
 from typing import List, Optional
 from langchain.chat_models import init_chat_model
@@ -53,6 +54,9 @@ class ESeimasAgent:
                 )
             }
         ]
+        # container to collect tool execution timings (list of dicts)
+        self._tool_timings = []
+
         self._init_tools()
         # Token usage calculator instance (LangChain-specific)
         self.token_calculator = LangChainTokenUsageCalculator(
@@ -72,11 +76,19 @@ class ESeimasAgent:
             Bus naudojama redakcija, galiojanti nurodytą datą.
             Atsakymas – aktualūs fragmentai ir jų šaltiniai, susiję su užklausa ir data.
             """
+            start = time.perf_counter()
             retrieved_docs = agent.store.query(query, date)
             serialized = "\n\n".join(
                 (f"Source: {doc.metadata}\nContent: {doc.page_content}")
                 for doc in retrieved_docs
             )
+            elapsed = time.perf_counter() - start
+            msg = f"TOOL TIMING: retrieve_context took {elapsed:.4f}s"
+            print(msg)
+            try:
+                self._tool_timings.append({"tool": "retrieve_context", "time": elapsed})
+            except Exception:
+                pass
             return serialized, retrieved_docs
 
         @tool(response_format="content")
@@ -86,7 +98,16 @@ class ESeimasAgent:
             Naudok šį įrankį, kai reikia sužinoti, kokia yra šiandienos data.
             Atsakymas visada bus dabartinė data.
             """
-            return datetime.now().date().isoformat()
+            start = time.perf_counter()
+            out = datetime.now().date().isoformat()
+            elapsed = time.perf_counter() - start
+            msg = f"TOOL TIMING: get_current_date took {elapsed:.6f}s"
+            print(msg)
+            try:
+                self._tool_timings.append({"tool": "get_current_date", "time": elapsed})
+            except Exception:
+                pass
+            return out
 
         @tool(response_format="content")
         def retrieve_law_changes(date: str):
@@ -96,13 +117,27 @@ class ESeimasAgent:
             date: Data ISO formatu (YYYY-MM-DD), iki kurios (imtinai) ieškoma pakeitimų.
             Atsakymas grąžinamas JSON formatu: sąrašas objektų su laukais "text" (pakeitimo aprašymas) ir "url" (nuoroda į pilną dokumento, kuris pakeitė šį dokumentą, tekstą).
             """
+            start = time.perf_counter()
             list_of_changes = agent.store.retrieve_list_of_changes(date)
             if not list_of_changes:
-                return "Nerasta jokių pakeitimų nurodytai datai galiojančiai redakcijai."
+                out = "Nerasta jokių pakeitimų nurodytai datai galiojančiai redakcijai."
+                elapsed = time.perf_counter() - start
+                print(f"TOOL TIMING: retrieve_law_changes took {elapsed:.4f}s")
+                try:
+                    self._tool_timings.append({"tool": "retrieve_law_changes", "time": elapsed})
+                except Exception:
+                    pass
+                return out
             serialized = json.dumps([
                 {"text": change["text"], "url": change["url"]}
                 for change in list_of_changes
             ], ensure_ascii=False, indent=2)
+            elapsed = time.perf_counter() - start
+            print(f"TOOL TIMING: retrieve_law_changes took {elapsed:.4f}s")
+            try:
+                self._tool_timings.append({"tool": "retrieve_law_changes", "time": elapsed})
+            except Exception:
+                pass
             return serialized
 
         @tool(response_format="content")
@@ -127,13 +162,28 @@ class ESeimasAgent:
                 "Referer": "https://e-seimas.lrs.lt/",
                 "Connection": "keep-alive",
             }
+            start = time.perf_counter()
             resp = requests.get(url, timeout=30, headers=headers)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
             root = soup.find("div", class_="WordSection1")
             if not root:
-                return resp.text
-            return root.get_text()
+                out = resp.text
+                elapsed = time.perf_counter() - start
+                print(f"TOOL TIMING: retrieve_law_text took {elapsed:.4f}s")
+                try:
+                    self._tool_timings.append({"tool": "retrieve_law_text", "time": elapsed})
+                except Exception:
+                    pass
+                return out
+            out = root.get_text()
+            elapsed = time.perf_counter() - start
+            print(f"TOOL TIMING: retrieve_law_text took {elapsed:.4f}s")
+            try:
+                self._tool_timings.append({"tool": "retrieve_law_text", "time": elapsed})
+            except Exception:
+                pass
+            return out
 
         @tool(response_format="content")
         def retrieve_date_ranges_of_available_editions():    
@@ -143,8 +193,15 @@ class ESeimasAgent:
             Rezultatas – sąrašas datų intervalų, kurių kiekvienas atitinka vieną redakciją, json formatu.
             Jei "effective_to" yra 3000-00-00, reiškia, kad tai yra paskutinė galima redakcija ir ji galios kol neatsiras naujų pakeitimų.
             """
+            start = time.perf_counter()
             ranges = agent.store.resolve_ranges_of_available_editions()
             serialized = json.dumps(ranges, ensure_ascii=False, indent=2)
+            elapsed = time.perf_counter() - start
+            print(f"TOOL TIMING: retrieve_date_ranges_of_available_editions took {elapsed:.4f}s")
+            try:
+                self._tool_timings.append({"tool": "retrieve_date_ranges_of_available_editions", "time": elapsed})
+            except Exception:
+                pass
             return serialized
 
         @tool(response_format="content")
@@ -156,10 +213,17 @@ class ESeimasAgent:
             date: Data ISO formatu (YYYY-MM-DD) – nurodo, kuri redakcija turi būti taikoma ieškant straipsnio teksto.
             Bus naudojama redakcija, galiojanti nurodytą datą.
             """
+            start = time.perf_counter()
             article_text = agent.store.resolve_full_document_by_article_no(
                 article_no,
                 date
             )
+            elapsed = time.perf_counter() - start
+            print(f"TOOL TIMING: retrieve_full_article_text_by_no took {elapsed:.4f}s")
+            try:
+                self._tool_timings.append({"tool": "retrieve_full_article_text_by_no", "time": elapsed})
+            except Exception:
+                pass
             return article_text
 
         self.tools = [
@@ -172,11 +236,20 @@ class ESeimasAgent:
         ]
 
     def get_agent_response(self, message, parameters):
+        # clear previous tool timings and start total timer
+        import logging
+        self._tool_timings = []
+        total_start = time.perf_counter()
 
+        step_times = {}
+
+        step_start = time.perf_counter()
         model = init_chat_model(
             f"openai:gpt-5-mini",
         )
+        step_times["init_chat_model"] = time.perf_counter() - step_start
 
+        step_start = time.perf_counter()
         agent = create_agent(
             model=model,
             system_prompt=self.prompts[-1]["content"],
@@ -184,15 +257,21 @@ class ESeimasAgent:
             checkpointer=self.checkpointer,
             tools=self.tools,
         )
+        step_times["create_agent"] = time.perf_counter() - step_start
 
+        step_start = time.perf_counter()
         result = agent.invoke(
             {"messages": [message]},
             config={"configurable": {"thread_id": parameters["thread_id"]}}
         )
+        step_times["agent_invoke"] = time.perf_counter() - step_start
 
+        step_start = time.perf_counter()
         for msg in result["messages"]:
             msg.pretty_print()
+        step_times["pretty_print"] = time.perf_counter() - step_start
 
+        step_start = time.perf_counter()
         execution_trace = []
 
         from contextlib import redirect_stdout     
@@ -200,34 +279,42 @@ class ESeimasAgent:
         for msg in result["messages"]:   
             with redirect_stdout(buf):
                 msg.pretty_print()
-                pretty_text = buf.getvalue()
-                execution_trace.append(pretty_text)
-                buf.truncate(0)
-                buf.seek(0)
+            pretty_text = buf.getvalue()
+            execution_trace.append(pretty_text)
+            buf.truncate(0)
+            buf.seek(0)
+        step_times["execution_trace"] = time.perf_counter() - step_start
 
-
-        # Build message list for token calculation (simulate OpenAI/ChatML format)
-        # result["messages"] is assumed to be a list of message objects with .type and .content
-        # Build system content for token calculations
-        try:
-            system_content = self.prompts[-1]["content"] if hasattr(self, 'prompts') and self.prompts else ""
-        except Exception:
-            system_content = ""
-
+        step_start = time.perf_counter()
         # Final assistant response text (kept for return/presentation)
         raw_text = json.dumps(result['structured_response'].model_dump(), indent=2)
+        step_times["json_dumps"] = time.perf_counter() - step_start
 
+        step_start = time.perf_counter()
         # Compute token usage and costs via LangChainTokenUsageCalculator
         # Note: calculator uses canonical `result["messages"]` only; do not
         # pass the serialized assistant response again to avoid double-counting.
         token_usage = self.token_calculator.compute(
-            result_messages=result["messages"],
-            system_content=system_content,
+            result_messages=result["messages"]
         )
+        step_times["token_usage"] = time.perf_counter() - step_start
+
+        total_elapsed = time.perf_counter() - total_start
+        print(f"FUNCTION TIMING: get_agent_response took {total_elapsed:.4f}s")
+
+        print(f"Number of steps in step_times: {len(step_times)}")
+        # Log step timings
+        for step, t in step_times.items():
+            print(f"STEP TIMING: {step} took {t:.4f}s")
 
         return {
             "output_text": raw_text,
             "output_parsed": result['structured_response'],
             "execution_trace": execution_trace,
             "token_usage": token_usage,
+            "timings": {
+                "total_time": total_elapsed,
+                "tool_timings": self._tool_timings,
+                "step_timings": step_times,
+            },
         }
